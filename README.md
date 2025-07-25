@@ -178,7 +178,202 @@ The goal of this project was to set up a Kubernetes cluster manually, without re
   node-1
   ```
 
-### 7. Troubleshooting
+### 7. Certificate Authority and Certificate Generation
+
+- Created a Certificate Authority (CA) configuration file `ca.conf` for generating certificates:
+  ```bash
+  [req]
+  distinguished_name = req_distinguished_name
+  prompt             = no
+  x509_extensions    = ca_x509_extensions
+
+  [ca_x509_extensions]
+  basicConstraints = CA:TRUE
+  keyUsage         = cRLSign, keyCertSign
+
+  [req_distinguished_name]
+  C   = US
+  ST  = Washington
+  L   = Seattle
+  CN  = CA
+
+  [admin]
+  distinguished_name = admin_distinguished_name
+  prompt             = no
+  req_extensions     = default_req_extensions
+
+  [admin_distinguished_name]
+  CN = admin
+  O  = system:masters
+
+  [service-accounts]
+  distinguished_name = service-accounts_distinguished_name
+  prompt             = no
+  req_extensions     = default_req_extensions
+
+  [service-accounts_distinguished_name]
+  CN = service-accounts
+
+  [node-0]
+  distinguished_name = node-0_distinguished_name
+  prompt             = no
+  req_extensions     = node-0_req_extensions
+
+  [node-0_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Node-0 Certificate"
+  subjectAltName       = DNS:node-0, IP:127.0.0.1
+  subjectKeyIdentifier = hash
+
+  [node-0_distinguished_name]
+  CN = system:node:node-0
+  O  = system:nodes
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [node-1]
+  distinguished_name = node-1_distinguished_name
+  prompt             = no
+  req_extensions     = node-1_req_extensions
+
+  [node-1_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Node-1 Certificate"
+  subjectAltName       = DNS:node-1, IP:127.0.0.1
+  subjectKeyIdentifier = hash
+
+  [node-1_distinguished_name]
+  CN = system:node:node-1
+  O  = system:nodes
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [kube-proxy]
+  distinguished_name = kube-proxy_distinguished_name
+  prompt             = no
+  req_extensions     = kube-proxy_req_extensions
+
+  [kube-proxy_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Kube Proxy Certificate"
+  subjectAltName       = DNS:kube-proxy, IP:127.0.0.1
+  subjectKeyIdentifier = hash
+
+  [kube-proxy_distinguished_name]
+  CN = system:kube-proxy
+  O  = system:node-proxier
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [kube-controller-manager]
+  distinguished_name = kube-controller-manager_distinguished_name
+  prompt             = no
+  req_extensions     = kube-controller-manager_req_extensions
+
+  [kube-controller-manager_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Kube Controller Manager Certificate"
+  subjectAltName       = DNS:kube-controller-manager, IP:127.0.0.1
+  subjectKeyIdentifier = hash
+
+  [kube-controller-manager_distinguished_name]
+  CN = system:kube-controller-manager
+  O  = system:kube-controller-manager
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [kube-scheduler]
+  distinguished_name = kube-scheduler_distinguished_name
+  prompt             = no
+  req_extensions     = kube-scheduler_req_extensions
+
+  [kube-scheduler_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Kube Scheduler Certificate"
+  subjectAltName       = DNS:kube-scheduler, IP:127.0.0.1
+  subjectKeyIdentifier = hash
+
+  [kube-scheduler_distinguished_name]
+  CN = system:kube-scheduler
+  O  = system:system:kube-scheduler
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [kube-api-server]
+  distinguished_name = kube-api-server_distinguished_name
+  prompt             = no
+  req_extensions     = kube-api-server_req_extensions
+
+  [kube-api-server_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth, serverAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client, server
+  nsComment            = "Kube API Server Certificate"
+  subjectAltName       = @kube-api-server_alt_names
+  subjectKeyIdentifier = hash
+
+  [kube-api-server_alt_names]
+  IP.0  = 127.0.0.1
+  IP.1  = 10.32.0.1
+  DNS.0 = kubernetes
+  DNS.1 = kubernetes.default
+  DNS.2 = kubernetes.default.svc
+  DNS.3 = kubernetes.default.svc.cluster
+  DNS.4 = kubernetes.svc.cluster.local
+  DNS.5 = server.kubernetes.local
+  DNS.6 = api-server.kubernetes.local
+
+  [kube-api-server_distinguished_name]
+  CN = kubernetes
+  C  = US
+  ST = Washington
+  L  = Seattle
+
+  [default_req_extensions]
+  basicConstraints     = CA:FALSE
+  extendedKeyUsage     = clientAuth
+  keyUsage             = critical, digitalSignature, keyEncipherment
+  nsCertType           = client
+  nsComment            = "Admin Client Certificate"
+  subjectKeyIdentifier = hash
+  ```
+- Generated CA key and certificate:
+  ```bash
+  openssl genrsa -out ca.key 4096
+  openssl req -x509 -new -sha512 -noenc -key ca.key -days 3653 -config ca.conf -out ca.crt
+  ```
+- Generated certificates for cluster components:
+  ```bash
+  certs=("admin" "node-0" "node-1" "kube-proxy" "kube-scheduler" "kube-controller-manager" "kube-api-server" "service-accounts")
+  for i in ${certs[*]}; do
+    openssl genrsa -out "${i}.key" 4096
+    openssl req -new -key "${i}.key" -sha256 -config "ca.conf" -section ${i} -out "${i}.csr"
+    openssl x509 -req -days 3653 -in "${i}.csr" -copy_extensions copyall -sha256 -CA "ca.crt" -CAkey "ca.key" -CAcreateserial -out "${i}.crt"
+  done
+  ```
+
+### 8. Troubleshooting
 
 - Encountered `Permission denied (publickey)` errors during SSH key distribution.
 - Resolved by:
@@ -201,6 +396,12 @@ The goal of this project was to set up a Kubernetes cluster manually, without re
 - Encountered `nginx: invalid option: "-"` when checking NGINX version.
   - Corrected by using `nginx -version` instead of `nginx --version`.
   - Confirmed NGINX version: `nginx/1.26.0 (Ubuntu)`.
+- Encountered `ca.crt: command not found` after generating CA certificate.
+  - This was due to attempting to execute `ca.crt ca.key` as a command. Resolved by verifying file creation with:
+    ```bash
+    ls
+    ```
+  - Confirmed presence of `ca.crt` and `ca.key`.
 
 ## Challenges Faced
 
@@ -209,6 +410,7 @@ The goal of this project was to set up a Kubernetes cluster manually, without re
 - **Service Restart Issues**: Attempted to restart `sshd` service but found it was managed by `ssh.socket`. Used `systemctl restart ssh.socket` to apply changes.
 - **Network Instability**: Broken pipe errors during SSH sessions were resolved by reconnecting.
 - **Command Syntax Errors**: Incorrect NGINX version command syntax was fixed by using the correct flag.
+- **Certificate Generation Error**: Attempting to run `ca.crt ca.key` as a command caused an error. Resolved by recognizing it was not a command but a file listing issue.
 
 ## Next Steps
 
@@ -231,6 +433,6 @@ This project is hosted on GitHub: [Insert GitHub Repository URL]
 - SSH key management and secure access configuration
 - Package management and binary installation
 - Hostname and network configuration
-- Troubleshooting SSH connectivity and command syntax issues
-- Scripting for automation (e.g., `while` loops for SSH key distribution and hosts file management)
-```
+- Certificate Authority setup and certificate generation for Kubernetes components
+- Troubleshooting SSH connectivity, command syntax, and certificate generation issues
+- Scripting for automation (e.g., `while` loops for SSH key distribution, hosts file management, and certificate generation)
