@@ -115,7 +115,70 @@ The goal of this project was to set up a Kubernetes cluster manually, without re
   k8s-node-1
   ```
 
-### 6. Troubleshooting
+### 6. Hostname and Hosts File Configuration
+
+- Configured hostnames and updated `/etc/hosts` on each node:
+  ```bash
+  while read IP FQDN HOST SUBNET; do
+    CMD="sed -i 's/^127.0.1.1.*/127.0.1.1\t${FQDN} ${HOST}/' /etc/hosts"
+    ssh -n root@${IP} "$CMD"
+    ssh -n root@${IP} hostnamectl set-hostname ${HOST}
+    ssh -n root@${IP} systemctl restart systemd-hostnamed
+  done < machine.txt
+  ```
+- Verified fully qualified domain names (FQDNs):
+  ```bash
+  while read IP FQDN HOST SUBNET; do
+    ssh -n root@${IP} hostname --fqdn
+  done < machine.txt
+  ```
+- Output:
+  ```bash
+  server.kubernetes.local
+  node-0.kubernetes.local
+  node-1.kubernetes.local
+  ```
+- Created a `hosts` file for cluster nodes:
+  ```bash
+  echo "" > hosts
+  echo "# Kubernetes The Hard Way" >> hosts
+  while read IP FQDN HOST SUBNET; do
+    ENTRY="${IP} ${FQDN} ${HOST}"
+    echo $ENTRY >> hosts
+  done < machine.txt
+  ```
+- Contents of `hosts` file:
+  ```bash
+  # Kubernetes The Hard Way
+  165.227.200.17 server.kubernetes.local server
+  143.244.144.193 node-0.kubernetes.local node-0
+  159.223.186.53 node-1.kubernetes.local node-1
+  ```
+- Appended `hosts` file to local `/etc/hosts`:
+  ```bash
+  cat hosts >> /etc/hosts
+  ```
+- Distributed `hosts` file to all nodes and appended to their `/etc/hosts`:
+  ```bash
+  while read IP FQDN HOST SUBNET; do
+    scp hosts root@${HOST}:~/
+    ssh -n root@${HOST} "cat hosts >> /etc/hosts"
+  done < machine.txt
+  ```
+- Verified hostname resolution on each node:
+  ```bash
+  for host in server node-0 node-1; do
+    ssh root@${host} hostname
+  done
+  ```
+- Output:
+  ```bash
+  server
+  node-0
+  node-1
+  ```
+
+### 7. Troubleshooting
 
 - Encountered `Permission denied (publickey)` errors during SSH key distribution.
 - Resolved by:
@@ -130,12 +193,22 @@ The goal of this project was to set up a Kubernetes cluster manually, without re
   sudo systemctl status ssh.service
   sudo sshd -t
   ```
+- Experienced `client_loop: send disconnect: Broken pipe` during SSH session.
+  - Likely caused by network instability or idle timeout. Re-established connection using:
+    ```bash
+    ssh -i ~/.ssh/id_rsa_personal root@157.245.204.83
+    ```
+- Encountered `nginx: invalid option: "-"` when checking NGINX version.
+  - Corrected by using `nginx -version` instead of `nginx --version`.
+  - Confirmed NGINX version: `nginx/1.26.0 (Ubuntu)`.
 
 ## Challenges Faced
 
 - **SSH Authentication Issues**: Initial attempts to copy SSH keys failed due to `publickey` authentication restrictions. Resolved by enabling `PermitRootLogin` and temporarily enabling password authentication.
 - **File Not Found Errors**: Incorrect file name (`machines.txt` vs. `machine.txt`) caused script failures, fixed by correcting the file name in commands.
 - **Service Restart Issues**: Attempted to restart `sshd` service but found it was managed by `ssh.socket`. Used `systemctl restart ssh.socket` to apply changes.
+- **Network Instability**: Broken pipe errors during SSH sessions were resolved by reconnecting.
+- **Command Syntax Errors**: Incorrect NGINX version command syntax was fixed by using the correct flag.
 
 ## Next Steps
 
@@ -157,6 +230,7 @@ This project is hosted on GitHub: [Insert GitHub Repository URL]
 - Linux system administration (Ubuntu 24.10)
 - SSH key management and secure access configuration
 - Package management and binary installation
-- Troubleshooting SSH connectivity issues
-- Scripting for automation (e.g., `while` loops for SSH key distribution)
+- Hostname and network configuration
+- Troubleshooting SSH connectivity and command syntax issues
+- Scripting for automation (e.g., `while` loops for SSH key distribution and hosts file management)
 ```
